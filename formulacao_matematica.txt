@@ -1,0 +1,63 @@
+using JuMP
+using GLPKMathProgInterface
+
+m = Model(solver=GLPKSolverMIP())
+
+arq = open("instancia.ins")
+linhas = readlines(arq)
+
+linha = split(linhas[1])
+num_v = parse(Int64, linha[1])
+num_g = parse(Int64, linha[2])
+
+linha = split(linhas[2])
+l_inf = Array{Int64}(num_g)
+l_sup = Array{Int64}(num_g)
+for g = 1:num_g
+    l_inf[g] = parse(Int64, linha[2*g - 1])
+    l_sup[g] = parse(Int64, linha[2*g])
+end    
+
+linha = split(linhas[3])
+vertices = Array{Int64}(num_v)
+for v in 1:num_v
+    vertices[v] = parse(Int64, linha[v])
+end
+
+arestas = zeros(Float64, num_v, num_v)
+for l = 4:length(linhas)
+    linha = split(linhas[l])
+    origem = parse(Int64, linha[1]) + 1
+    destino = parse(Int64, linha[2]) + 1
+    peso = parse(Float64, linha[3])
+    arestas[origem, destino] = peso
+end
+
+@variable(m, grupos[1:num_g, 1:num_v], Bin)
+@variable(m, vmg[1:num_g, 1:num_v, 1:num_v], Bin)
+
+@objective(m, Max, sum(vmg[g, v1, v2]*arestas[v1, v2]
+                      for v1 in 1:num_v, v2 in v1:num_v, g in 1:num_g))
+                      
+@constraints(m, begin [v in 1:num_v],
+                      sum(grupos[g, v]
+                      for g in 1:num_g) == 1
+                end)
+
+@constraints(m, begin [g in 1:num_g],
+                      sum(vertices[v]*grupos[g, v]
+                      for v in 1:num_v) >= l_inf[g]
+                end)
+
+@constraints(m, begin [g in 1:num_g],
+                      sum(vertices[v]*grupos[g, v]
+                      for v in 1:num_v) <= l_sup[g]
+                end) 
+                
+@constraints(m, begin [v1 in 1:num_v, v2 in v1:num_v, g in 1:num_g],
+                      vmg[g, v1, v2] <= (grupos[g, v1] + grupos[g, v2])/2
+                end)
+                
+@constraints(m, begin [v1 in 1:num_v, v2 in v1:num_v, g in 1:num_g],
+                      vmg[g, v1, v2] >= grupos[g, v1] + grupos[g, v2] - 1
+                end)
